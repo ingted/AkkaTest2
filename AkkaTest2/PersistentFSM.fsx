@@ -18,33 +18,20 @@ type Command =
     | Leave
     | GetCurrentCart
 
-type IUserState = inherit PersistentFSM.IFsmState
-
 type UserState =
     | LookingAround
     | Shopping
     | Inactive
     | Paid
-    interface IUserState with
-        member this.Identifier =
-            match this with
-            | LookingAround -> "Looking Around"
-            | Shopping -> "Shopping"
-            | Inactive -> "Inactive"
-            | Paid -> "Paid"
+    interface PersistentFSM.IFsmState with
+        member this.Identifier = sprintf "%A" this
 
 type DomainEvent =
     | ItemAdded of Item
     | OrderExecuted
     | OrderDiscarded
 
-type ShoppingCart =
-    | Empty
-    | NonEmpty of Item list
-    member this.AddItem item = 
-        match this with
-        | Empty -> NonEmpty [item]
-        | NonEmpty items -> NonEmpty (item :: items)
+type ShoppingCart = ShoppingCart of Item list
 
 type ReportEvent =
     | PurchaseWasMade of seq<Item>
@@ -56,7 +43,7 @@ type T() as self =
 
     let (=>) (state: UserState) (f: FSMBase.Event<ShoppingCart> -> _) = self.When(state, fun evt _ -> f evt)
 
-    do self.StartWith(LookingAround, Empty)
+    do self.StartWith(LookingAround, ShoppingCart [])
        
        LookingAround => fun evt ->
            match evt.FsmEvent with
@@ -83,10 +70,10 @@ type T() as self =
                     self.GoTo(Paid).Applying(OrderExecuted)
                         .AndThen(fun cart ->
                             match cart with
-                            | NonEmpty items ->
-                                reportActor.Tell(PurchaseWasMade items)
+                            | ShoppingCart [] ->
                                 self.SaveStateSnapshot()
-                            | Empty ->
+                            | ShoppingCart items ->
+                                reportActor.Tell(PurchaseWasMade items)
                                 self.SaveStateSnapshot())
                 | Leave ->
                     self.Stop().Applying(OrderDiscarded)
@@ -123,11 +110,12 @@ type T() as self =
                | _ -> self.Stay()
            | _ -> self.Stay()
 
-    override __.ApplyEvent (evt, cartBeforeEvent) =
-        match evt with
-        | ItemAdded item -> cartBeforeEvent.AddItem item
-        | OrderExecuted -> cartBeforeEvent
-        | OrderDiscarded -> Empty
+    override __.ApplyEvent (evt, ShoppingCart itemsBeforeEvent) =
+        ShoppingCart <| 
+            match evt with
+            | ItemAdded item -> item :: itemsBeforeEvent
+            | OrderExecuted -> itemsBeforeEvent
+            | OrderDiscarded -> []
 
     override __.PersistenceId = "id"
     override __.ReceiveRecover _ = false
