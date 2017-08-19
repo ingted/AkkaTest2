@@ -51,9 +51,8 @@ type ReportEvent =
     | ShoppingCardDiscarded
 
 type T() as self =
-    inherit PersistentFSMBase<UserState, ShoppingCart, DomainEvent>()
+    inherit PersistentFSM<UserState, ShoppingCart, DomainEvent>()
     let reportActor: IActorRef = null
-    let saveStateSnapshot() = ()
 
     let (=>) (state: UserState) (f: FSMBase.Event<ShoppingCart> -> _) = self.When(state, fun evt _ -> f evt)
 
@@ -86,14 +85,14 @@ type T() as self =
                             match cart with
                             | NonEmpty items ->
                                 reportActor.Tell(PurchaseWasMade items)
-                                saveStateSnapshot()
+                                self.SaveStateSnapshot()
                             | Empty ->
-                                saveStateSnapshot())
+                                self.SaveStateSnapshot())
                 | Leave ->
                     self.Stop().Applying(OrderDiscarded)
                         .AndThen(fun cart ->
                            reportActor.Tell(ShoppingCardDiscarded)
-                           saveStateSnapshot())
+                           self.SaveStateSnapshot())
                 | GetCurrentCart ->
                     self.Stay().Replying(evt.StateData)
            | :? FSMBase.StateTimeout ->
@@ -123,6 +122,12 @@ type T() as self =
                | GetCurrentCart -> self.Stay().Replying(evt.StateData)
                | _ -> self.Stay()
            | _ -> self.Stay()
+
+    override __.ApplyEvent (evt, cartBeforeEvent) =
+        match evt with
+        | ItemAdded item -> cartBeforeEvent.AddItem item
+        | OrderExecuted -> cartBeforeEvent
+        | OrderDiscarded -> Empty
 
     override __.PersistenceId = "id"
     override __.ReceiveRecover _ = false
