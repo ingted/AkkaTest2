@@ -3,7 +3,6 @@
 #r @"..\packages\Akka.Persistence.1.3.0\lib\net45\Akka.Persistence.dll"
 
 open Akka.Actor
-open Akka.Event
 open Akka.Persistence
 open Akka.Persistence.Fsm
 open System
@@ -56,8 +55,11 @@ type T() as self =
     let reportActor: IActorRef = null
     let saveStateSnapshot() = ()
 
+    let (=>) (state: UserState) (f: FSMBase.Event<ShoppingCart> -> _) = self.When(state, fun evt _ -> f evt)
+
     do self.StartWith(LookingAround, Empty)
-       self.When(LookingAround, fun evt _ ->
+       
+       LookingAround => fun evt ->
            match evt.FsmEvent with
            | :? Command as cmd ->
                 match cmd with
@@ -68,9 +70,9 @@ type T() as self =
                 | GetCurrentCart ->
                     self.Stay().Replying(evt.StateData)
                 | _ -> self.Stay()
-           | _ -> self.Stay())
+           | _ -> self.Stay()
 
-       self.When(Shopping, fun evt _ ->
+       Shopping => fun evt ->
            match evt.FsmEvent with
            | :? Command as cmd ->
                 match cmd with
@@ -96,9 +98,9 @@ type T() as self =
                     self.Stay().Replying(evt.StateData)
            | :? FSMBase.StateTimeout ->
                self.GoTo(Inactive).ForMax(TimeSpan.FromSeconds 2.)
-           | _ -> self.Stay())
+           | _ -> self.Stay()
 
-       self.When(Inactive, fun evt _ ->
+       Inactive => fun evt ->
            match evt.FsmEvent with
            | :? Command as cmd ->
                match cmd with
@@ -111,16 +113,16 @@ type T() as self =
                self.Stop()
                    .Applying(OrderDiscarded)
                    .AndThen(fun cart -> reportActor.Tell ShoppingCardDiscarded)
-           | _ -> self.Stay())
+           | _ -> self.Stay()
 
-       self.When(Paid, fun evt _ ->
+       Paid => fun evt ->
            match evt.FsmEvent with
            | :? Command as cmd ->
                match cmd with
                | Leave -> self.Stop()
                | GetCurrentCart -> self.Stay().Replying(evt.StateData)
                | _ -> self.Stay()
-           | _ -> self.Stay())
+           | _ -> self.Stay()
 
     override __.PersistenceId = "id"
     override __.ReceiveRecover _ = false
