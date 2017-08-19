@@ -1,4 +1,5 @@
-﻿#r @"..\packages\Akka.1.3.0\lib\net45\Akka.dll"
+﻿#r @"..\packages\Newtonsoft.Json.9.0.1\lib\net45\Newtonsoft.Json.dll"
+#r @"..\packages\Akka.1.3.0\lib\net45\Akka.dll"
 
 open Akka.Actor
 open Akka.Routing
@@ -41,3 +42,4 @@ for k, v in messages |> Seq.map (fun (KeyValue(k, v)) -> k, v) |> Seq.sortByDesc
 
 for k, v in stat |> Seq.map (fun (KeyValue(k, v)) -> k, v) |> Seq.sortByDescending snd do
     printfn "actor %9d got %3d messages" k v
+
